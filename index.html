@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Vision Pro | Professional Image Editing</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Quick loader style for FOUC prevention */
+        .quick-loader {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="modal-body">
+                <h2><i class="fas fa-lock"></i> Authentication Required</h2>
+                <p>Please sign in to use our AI-powered image tools</p>
+                <div class="auth-options">
+                    <button id="googleSignInBtn" class="btn-auth google-btn">
+                        <i class="fab fa-google"></i> Sign in with Google
+                    </button>
+                </div>
+                <div class="modal-loading" id="modalLoading">
+                    <div class="local-spinner">
+                        <div class="double-bounce1"></div>
+                        <div class="double-bounce2"></div>
+                    </div>
+                </div>
+                <p class="modal-note">First-time users get 3 free credits!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <nav class="navbar">
+            <div class="container nav-container">
+                <a href="#" class="logo">
+                    <i class="fas fa-eye"></i> AI Vision Pro
+                </a>
+                <ul class="nav-menu">
+                    <li><a href="#home">Home</a></li>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#tools">Tools</a></li>
+                    <li><a href="#pricing">Pricing</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li class="nav-divider"></li>
+                    <li class="user-section">
+                        <span id="userGreeting" style="display: none;">
+                            <i class="fas fa-user-circle"></i> 
+                            <span id="userName"></span>
+                        </span>
+                        <button id="authBtn" class="btn btn-outline">
+                            <i class="fas fa-sign-in-alt"></i> Sign In
+                        </button>
+                        <div id="userDropdown" class="user-dropdown">
+                            <a href="#"><i class="fas fa-history"></i> Usage History</a>
+                            <a href="#"><i class="fas fa-chart-bar"></i> Analytics</a>
+                            <a href="#"><i class="fas fa-cog"></i> Settings</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="#" id="deleteAccountBtn"><i class="fas fa-trash"></i> Delete Account</a>
+                            <a href="#" id="signOutBtn"><i class="fas fa-sign-out-alt"></i> Sign Out</a>
+                        </div>
+                    </li>
+                </ul>
+                <div class="hamburger">
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Hero Section -->
+        <section id="home" class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <div class="hero-text">
+                        <h1 class="hero-title">
+                            <span class="gradient-text">AI-Powered</span> Image Perfection
+                        </h1>
+                        <p class="hero-subtitle">
+                            Professional background removal and quality enhancement 
+                            powered by advanced AI technology
+                        </p>
+                        <div class="hero-stats">
+                            <div class="stat">
+                                <h3>99.9%</h3>
+                                <p>Accuracy</p>
+                            </div>
+                            <div class="stat">
+                                <h3>10M+</h3>
+                                <p>Images Processed</p>
+                            </div>
+                            <div class="stat">
+                                <h3>2s</h3>
+                                <p>Average Processing</p>
+                            </div>
+                        </div>
+                        <div class="hero-buttons">
+                            <button class="btn btn-primary" onclick="scrollToTools()">
+                                <i class="fas fa-magic"></i> Try Now
+                            </button>
+                            <button class="btn btn-outline" onclick="scrollToPricing()">
+                                <i class="fas fa-crown"></i> View Plans
+                            </button>
+                        </div>
+                    </div>
+                    <div class="hero-visual">
+                        <div class="floating-card">
+                            <div class="card-content">
+                                <div class="before-after-demo" id="heroDemo">
+                                    <div class="image-container">
+                                        <img src="images/a1.jpg" alt="After background removal" class="after-image" id="afterImage">
+                                        <div class="after-overlay">
+                                            <img src="images/a2.jpg" alt="After background removal" class="after-image" id="afterImage">
+                                                 alt="After" class="after-image">
+                                        </div>
+                                        <div class="slider-handle">
+                                            <i class="fas fa-arrows-alt-h"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section id="features" class="features">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">Powerful Features</h2>
+                    <p class="section-subtitle">Everything you need for professional image editing</p>
+                </div>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <h3>AI-Powered</h3>
+                        <p>Advanced neural networks for precise background removal and quality enhancement</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <h3>Lightning Fast</h3>
+                        <p>Process images in seconds with our optimized AI algorithms</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3>Secure & Private</h3>
+                        <p>Your images are processed securely and never stored permanently</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-layer-group"></i>
+                        </div>
+                        <h3>Batch Processing</h3>
+                        <p>Process multiple images simultaneously with our batch upload feature</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tools Section -->
+        <section id="tools" class="tools">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">AI Tools</h2>
+                    <p class="section-subtitle">Transform your images with our advanced AI tools</p>
+                </div>
+                
+                <div class="tools-container">
+                    <!-- Background Removal Tool -->
+                    <div class="tool-card">
+                        <div class="tool-header">
+                            <div class="tool-icon">
+                                <i class="fas fa-cut"></i>
+                            </div>
+                            <div class="tool-info">
+                                <h3>Background Remover</h3>
+                                <p>Remove backgrounds instantly with AI precision</p>
+                            </div>
+                            <span class="tool-badge">Most Popular</span>
+                        </div>
+                        
+                        <div class="tool-body">
+                            <div class="upload-area" id="bgRemoveUpload">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <h4>Drop your image here</h4>
+                                <p>or click to browse (PNG, JPG, JPEG, WEBP)</p>
+                                <input type="file" id="bgRemoveInput" accept=".png,.jpg,.jpeg,.webp" hidden>
+                                <button class="btn btn-outline" onclick="document.getElementById('bgRemoveInput').click()">
+                                    Select Image
+                                </button>
+                            </div>
+                            
+                            <div class="processing-section" id="bgRemoveProcessing" style="display: none;">
+                                <div class="local-loading" id="bgRemoveLoading" style="display: none;">
+                                    <div class="local-spinner">
+                                        <div class="double-bounce1"></div>
+                                        <div class="double-bounce2"></div>
+                                    </div>
+                                </div>
+                                <div class="processing-header">
+                                    <h4><i class="fas fa-spinner fa-spin"></i> Processing...</h4>
+                                    <div class="processing-bar">
+                                        <div class="processing-progress"></div>
+                                    </div>
+                                </div>
+                                <div class="before-after-container">
+                                    <div class="comparison-container">
+                                        <div class="before-section">
+                                            <h5>Original</h5>
+                                            <img id="bgRemoveBefore" src="" alt="Original" class="comparison-image">
+                                        </div>
+                                        <div class="after-section">
+                                            <h5>Background Removed</h5>
+                                            <img id="bgRemoveAfter" src="" alt="Processed" class="comparison-image">
+                                        </div>
+                                    </div>
+                                    <div class="slider-container">
+                                        <input type="range" min="0" max="100" value="50" class="tool-slider" 
+                                               oninput="moveToolDivider(this, 'bgRemove')">
+                                        <div class="tool-slider-divider" id="bgRemoveDivider"></div>
+                                    </div>
+                                </div>
+                                <div class="processing-actions">
+                                    <button class="btn btn-primary" onclick="downloadImage('bgRemove')">
+                                        <i class="fas fa-download"></i> Download Result
+                                    </button>
+                                    <button class="btn btn-outline" onclick="resetTool('bgRemove')">
+                                        <i class="fas fa-redo"></i> Process Another
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Image Enhancement Tool -->
+                    <div class="tool-card">
+                        <div class="tool-header">
+                            <div class="tool-icon">
+                                <i class="fas fa-star"></i>
+                            </div>
+                            <div class="tool-info">
+                                <h3>Image Enhancer</h3>
+                                <p>Enhance quality, sharpness, and resolution</p>
+                            </div>
+                            <span class="tool-badge new">New</span>
+                        </div>
+                        
+                        <div class="tool-body">
+                            <div class="enhancement-controls">
+                                <div class="control-group">
+                                    <label for="enhancementLevel">
+                                        <i class="fas fa-sliders-h"></i> Enhancement Level
+                                    </label>
+                                    <div class="level-selector">
+                                        <button class="level-btn" data-level="1" onclick="setEnhancementLevel(1)">Low</button>
+                                        <button class="level-btn active" data-level="2" onclick="setEnhancementLevel(2)">Medium</button>
+                                        <button class="level-btn" data-level="3" onclick="setEnhancementLevel(3)">High</button>
+                                        <button class="level-btn" data-level="4" onclick="setEnhancementLevel(4)">Max</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="upload-area" id="enhanceUpload">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <h4>Drop image to enhance</h4>
+                                <p>or click to browse (PNG, JPG, JPEG, WEBP)</p>
+                                <input type="file" id="enhanceInput" accept=".png,.jpg,.jpeg,.webp" hidden>
+                                <button class="btn btn-outline" onclick="document.getElementById('enhanceInput').click()">
+                                    Select Image
+                                </button>
+                            </div>
+                            
+                            <div class="processing-section" id="enhanceProcessing" style="display: none;">
+                                <div class="local-loading" id="enhanceLoading" style="display: none;">
+                                    <div class="local-spinner">
+                                        <div class="double-bounce1"></div>
+                                        <div class="double-bounce2"></div>
+                                    </div>
+                                </div>
+                                <div class="processing-header">
+                                    <h4><i class="fas fa-spinner fa-spin"></i> Enhancing Image...</h4>
+                                    <div class="processing-bar">
+                                        <div class="processing-progress"></div>
+                                    </div>
+                                </div>
+                                <div class="before-after-container">
+                                    <div class="comparison-container">
+                                        <div class="before-section">
+                                            <h5>Original</h5>
+                                            <img id="enhanceBefore" src="" alt="Original" class="comparison-image">
+                                        </div>
+                                        <div class="after-section">
+                                            <h5>Enhanced</h5>
+                                            <img id="enhanceAfter" src="" alt="Processed" class="comparison-image">
+                                        </div>
+                                    </div>
+                                    <div class="slider-container">
+                                        <input type="range" min="0" max="100" value="50" class="tool-slider" 
+                                               oninput="moveToolDivider(this, 'enhance')">
+                                        <div class="tool-slider-divider" id="enhanceDivider"></div>
+                                    </div>
+                                </div>
+                                <div class="enhancement-stats">
+                                    <div class="stat">
+                                        <i class="fas fa-expand-alt"></i>
+                                        <span id="resolutionIncrease">+0%</span>
+                                        <small>Resolution</small>
+                                    </div>
+                                    <div class="stat">
+                                        <i class="fas fa-bolt"></i>
+                                        <span id="qualityImprovement">+0%</span>
+                                        <small>Quality</small>
+                                    </div>
+                                    <div class="stat">
+                                        <i class="fas fa-chart-line"></i>
+                                        <span id="psnrScore">0 dB</span>
+                                        <small>PSNR</small>
+                                    </div>
+                                </div>
+                                <div class="processing-actions">
+                                    <button class="btn btn-primary" onclick="downloadImage('enhance')">
+                                        <i class="fas fa-download"></i> Download Enhanced
+                                    </button>
+                                    <button class="btn btn-outline" onclick="resetTool('enhance')">
+                                        <i class="fas fa-redo"></i> Enhance Another
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section id="pricing" class="pricing">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">Pricing Plans</h2>
+                    <p class="section-subtitle">Choose the perfect plan for your needs</p>
+                </div>
+                
+                <div class="pricing-cards">
+                    <!-- Free Plan -->
+                    <div class="pricing-card">
+                        <div class="pricing-header">
+                            <h3>Free</h3>
+                            <div class="price">
+                                <span class="currency">$</span>
+                                <span class="amount">0</span>
+                                <span class="period">/month</span>
+                            </div>
+                        </div>
+                        <div class="pricing-features">
+                            <ul>
+                                <li><i class="fas fa-check"></i> 3 Credits Monthly</li>
+                                <li><i class="fas fa-check"></i> Background Removal</li>
+                                <li><i class="fas fa-check"></i> Basic Enhancement</li>
+                                <li><i class="fas fa-times"></i> Batch Processing</li>
+                                <li><i class="fas fa-times"></i> Priority Support</li>
+                                <li><i class="fas fa-times"></i> Commercial License</li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-outline" onclick="selectPlan('free')">
+                            Get Started
+                        </button>
+                    </div>
+
+                    <!-- Pro Plan -->
+                    <div class="pricing-card featured">
+                        <div class="pricing-badge">Most Popular</div>
+                        <div class="pricing-header">
+                            <h3>Pro</h3>
+                            <div class="price">
+                                <span class="currency">$</span>
+                                <span class="amount">19</span>
+                                <span class="period">/month</span>
+                            </div>
+                        </div>
+                        <div class="pricing-features">
+                            <ul>
+                                <li><i class="fas fa-check"></i> 150 Credits Monthly</li>
+<li><i class="fas fa-check"></i> 1 credit per image</li>
+                                <li><i class="fas fa-check"></i> Advanced Background Removal</li>
+                                <li><i class="fas fa-check"></i> Max Enhancement</li>
+               
+                                <li><i class="fas fa-check"></i> Priority Support</li>
+                                <li><i class="fas fa-times"></i> Commercial License</li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-primary" onclick="selectPlan('pro')">
+                            Upgrade to Pro
+                        </button>
+                    </div>
+
+                    <!-- Business Plan -->
+                    <div class="pricing-card">
+                        <div class="pricing-header">
+                            <h3>One Time Payment</h3>
+                            <div class="price">
+                                <span class="currency">$</span>
+                                <span class="amount">70</span>
+                                <span class="period">/lifetime access</span>
+                            </div>
+                        </div>
+                        <div class="pricing-features">
+                            <ul>
+                                <li><i class="fas fa-check"></i> 250 Credits</li>
+<li><i class="fas fa-check"></i> 1 credit per image</li>
+                                <li><i class="fas fa-check"></i> All AI Tools</li>
+
+                             
+                                <li><i class="fas fa-check"></i> 24/7 Priority Support</li>
+                                <li><i class="fas fa-check"></i> Commercial License</li>
+                               
+                            </ul>
+                        </div>
+                        <button class="btn btn-outline" onclick="selectPlan('business')">
+                            Buy
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="about">
+            <div class="container">
+                <div class="about-content">
+                    <div class="about-text">
+                        <h2>About AI Vision Pro</h2>
+                        <p>We're revolutionizing image editing with cutting-edge AI technology. Our platform combines state-of-the-art neural networks with user-friendly interfaces to deliver professional-grade results in seconds.</p>
+                        <div class="about-stats">
+                            <div class="about-stat">
+                                <h4>Advanced AI</h4>
+                                <p>Powered by BiRefNet and custom models</p>
+                            </div>
+                            <div class="about-stat">
+                                <h4>Global Reach</h4>
+                                <p>Serving users in 150+ countries</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="about-visual">
+                        <div class="tech-stack">
+                            <div class="tech-item">
+                                <i class="fas fa-brain"></i>
+                                <span>Neural Networks</span>
+                            </div>
+                            <div class="tech-item">
+                                <i class="fas fa-cloud"></i>
+                                <span>Cloud Processing</span>
+                            </div>
+                            <div class="tech-item">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Enterprise Security</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-logo">
+                        <i class="fas fa-eye"></i> AI Vision Pro
+                    </div>
+                    <p>Professional AI-powered image editing for everyone.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-github"></i></a>
+                        <a href="#"><i class="fab fa-discord"></i></a>
+                    </div>
+                </div>
+                <div class="footer-section">
+                    <h4>Tools</h4>
+                    <ul>
+                        <li><a href="#tools">Background Remover</a></li>
+                        <li><a href="#tools">Image Enhancer</a></li>
+                        <li><a href="#tools">Batch Processing</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#about">About Us</a></li>
+                        <li><a href="#pricing">Pricing</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Cookie Policy</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 AI Vision Pro. All rights reserved.</p>
+                <div class="footer-info">
+                    <span><i class="fas fa-server"></i> API Status: <span class="status online">Online</span></span>
+                    <span><i class="fas fa-users"></i> Users Online: <span id="onlineUsers">1,234</span></span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js"></script>
+</body>
+</html>
