@@ -9,6 +9,10 @@ const firebaseConfig = {
   appId: "1:573640491478:web:01beb89a6c61084435e477"
 };
 
+// Stripe Configuration
+const STRIPE_PUBLIC_KEY = 'pk_test_51SjJLnLzuSrxq3B6HSZqDARNnAGWfpLpAKoeySr7Lpg1tgWx0MMCzel3WpXMCJfIrRsw687JfRLjmxAX18tlfFaf00vN39WNlZ';
+const STRIPE_SECRET_KEY = 'sk_test_51SjJLnLzuSrxq3B6U46Li4nEt4w30TAk4XRMl0klj9cYOKxRssVJLqXVOEoBj5bT3Pj3U2XbijXA52kR43j1uIyT00TDBnnmgp'; // This should only be used server-side
+
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -23,10 +27,47 @@ const API_BASE_URL = 'http://localhost:5000'; // Change this to match your Flask
 let currentUser = null;
 let userData = null;
 let userCredits = 0;
+let userPackage = null;
+let packageExpiry = null;
 let enhancementLevel = 2;
 let currentProcessing = {
     bgRemove: { before: null, after: null },
     enhance: { before: null, after: null }
+};
+
+// Stripe Variables
+let stripe = null;
+let elements = null;
+let cardElement = null;
+let paymentIntentClientSecret = null;
+let currentPackage = null;
+
+// Package Definitions
+const packages = {
+    starter: {
+        name: "Starter Pack",
+        price: 5,
+        credits: 100,
+        duration: 30, // days
+        stripe_price_id: "price_starter", // You need to create this in Stripe Dashboard
+        product_id: "prod_starter"
+    },
+    growth: {
+        name: "Growth Pack",
+        price: 10,
+        credits: 250,
+        duration: 30,
+        stripe_price_id: "price_growth",
+        product_id: "prod_growth"
+    },
+    pro: {
+        name: "Pro Pack",
+        price: 17,
+        credits: 500,
+        duration: 30,
+        stripe_price_id: "price_pro",
+        product_id: "prod_pro"
+    }
 };
 
 // Toastr Configuration
@@ -50,7 +91,12 @@ toastr.options = {
 
 // DOM Elements
 const loginModal = document.getElementById('loginModal');
+const paymentModal = document.getElementById('paymentModal');
+const successModal = document.getElementById('successModal');
 const closeModalBtn = document.querySelector('.close-modal');
+const closePaymentModalBtn = document.querySelector('.close-payment-modal');
+const closeSuccessModalBtn = document.getElementById('closeSuccessModal');
+const cancelPaymentBtn = document.getElementById('cancel-payment');
 const googleSignInBtn = document.getElementById('googleSignInBtn');
 const authBtn = document.getElementById('authBtn');
 const signOutBtn = document.getElementById('signOutBtn');
@@ -61,6 +107,14 @@ const userDropdown = document.getElementById('userDropdown');
 const bgRemoveInput = document.getElementById('bgRemoveInput');
 const enhanceInput = document.getElementById('enhanceInput');
 const modalLoading = document.getElementById('modalLoading');
+const paymentForm = document.getElementById('payment-form');
+const submitPaymentBtn = document.getElementById('submit-payment');
+const paymentSpinner = document.getElementById('payment-spinner');
+const buttonText = document.getElementById('button-text');
+const cardErrors = document.getElementById('card-errors');
+
+// Pricing buttons
+let pricingButtons = [];
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async function() {
@@ -69,6 +123,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize hero slider
     initHeroSlider();
+    
+    // Initialize Stripe
+    initializeStripe();
     
     // Check if user is already signed in
     auth.onAuthStateChanged(async (user) => {
@@ -81,20 +138,182 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Check API health
     checkAPIHealth();
+    
+    // Initialize pricing buttons
+    initPricingButtons();
 });
+
+// Initialize Pricing Buttons
+function initPricingButtons() {
+    // Get all pricing buttons
+    pricingButtons = document.querySelectorAll('.pricing-card .btn');
+    
+    pricingButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Determine which plan was clicked based on button text or parent card
+            const card = this.closest('.pricing-card');
+            let plan = 'starter'; // default
+            
+            // Check which plan this button belongs to
+            if (card.querySelector('.pricing-header h3').textContent.includes('Starter')) {
+                plan = 'starter';
+            } else if (card.querySelector('.pricing-header h3').textContent.includes('Growth')) {
+                plan = 'growth';
+            } else if (card.querySelector('.pricing-header h3').textContent.includes('Pro')) {
+                plan = 'pro';
+            }
+            
+            selectPlan(plan);
+        });
+    });
+}
+
+// Check if user has active package that prevents new purchases
+function hasActivePackage() {
+    if (!currentUser) return false;
+    
+    // Check if user has a non-free package
+    if (!userPackage || userPackage === 'free') {
+        return false;
+    }
+    
+    // Check if package is expired
+    if (packageExpiry) {
+        const expiryDate = new Date(packageExpiry);
+        const now = new Date();
+        if (now > expiryDate) {
+            return false; // Package expired
+        }
+    }
+    
+    // Check if credits are below 4
+    if (userCredits < 4) {
+        return false; // Can purchase new package
+    }
+    
+    // User has active package with 4+ credits
+    return true;
+}
+
+// Update pricing buttons based on user's eligibility
+function updatePricingButtons() {
+    const canPurchase = !hasActivePackage();
+    
+    pricingButtons.forEach(button => {
+        if (canPurchase) {
+            button.disabled = false;
+            button.style.opacity = '1';
+            button.style.cursor = 'pointer';
+            button.title = '';
+        } else {
+            button.disabled = true;
+            button.style.opacity = '0.6';
+            button.style.cursor = 'not-allowed';
+            button.title = 'You already have an active package. Purchase will be available when credits drop below 4 or package expires.';
+            
+            // Add tooltip indicator
+            if (!button.querySelector('.package-active-indicator')) {
+                const indicator = document.createElement('span');
+                indicator.className = 'package-active-indicator';
+                indicator.innerHTML = '<i class="fas fa-crown"></i> Active Package';
+                indicator.style.cssText = `
+                    display: block;
+                    font-size: 0.8rem;
+                    color: #f59e0b;
+                    margin-top: 0.5rem;
+                `;
+                button.appendChild(indicator);
+            }
+        }
+    });
+}
+
+// Check purchase eligibility
+function checkPurchaseEligibility() {
+    if (!currentUser) {
+        return {
+            eligible: false,
+            reason: 'Please sign in to purchase a package'
+        };
+    }
+    
+    if (hasActivePackage()) {
+        return {
+            eligible: false,
+            reason: 'You already have an active package. You can purchase a new package when your credits drop below 4 or your current package expires.'
+        };
+    }
+    
+    return {
+        eligible: true,
+        reason: ''
+    };
+}
+
+// Initialize Stripe
+function initializeStripe() {
+    stripe = Stripe(STRIPE_PUBLIC_KEY);
+    elements = stripe.elements();
+    
+    // Create card element
+    const style = {
+        base: {
+            color: '#ffffff',
+            fontFamily: '"Poppins", sans-serif',
+            fontSmoothing: 'antialiased',
+            fontSize: '16px',
+            '::placeholder': {
+                color: '#94a3b8'
+            }
+        },
+        invalid: {
+            color: '#ef4444',
+            iconColor: '#ef4444'
+        }
+    };
+    
+    cardElement = elements.create('card', {
+        style: style,
+        hidePostalCode: true
+    });
+    
+    cardElement.mount('#card-element');
+    
+    // Handle real-time validation errors
+    cardElement.addEventListener('change', (event) => {
+        if (event.error) {
+            cardErrors.textContent = event.error.message;
+            cardErrors.style.color = '#ef4444';
+        } else {
+            cardErrors.textContent = '';
+        }
+    });
+}
 
 // Initialize Event Listeners
 function initEventListeners() {
-    // Modal
+    // Modals
     closeModalBtn.addEventListener('click', () => {
         loginModal.style.display = 'none';
         modalLoading.classList.remove('active');
     });
 
+    closePaymentModalBtn.addEventListener('click', closePaymentModal);
+    cancelPaymentBtn.addEventListener('click', closePaymentModal);
+    closeSuccessModalBtn.addEventListener('click', closeSuccessModal);
+
     window.addEventListener('click', (e) => {
         if (e.target === loginModal) {
             loginModal.style.display = 'none';
             modalLoading.classList.remove('active');
+        }
+        if (e.target === paymentModal) {
+            closePaymentModal();
+        }
+        if (e.target === successModal) {
+            closeSuccessModal();
         }
     });
 
@@ -115,39 +334,8 @@ function initEventListeners() {
     bgRemoveInput.addEventListener('change', (e) => handleFileUpload(e, 'bgRemove'));
     enhanceInput.addEventListener('change', (e) => handleFileUpload(e, 'enhance'));
 
-    // Drop zone functionality
-    ['bgRemoveUpload', 'enhanceUpload'].forEach(id => {
-        const dropZone = document.getElementById(id);
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = '#6366f1';
-            dropZone.style.background = 'rgba(99, 102, 241, 0.1)';
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            dropZone.style.background = 'rgba(15, 23, 42, 0.5)';
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            dropZone.style.background = 'rgba(15, 23, 42, 0.5)';
-            
-            const file = e.dataTransfer.files[0];
-            if (file && isImageFile(file)) {
-                const toolType = id === 'bgRemoveUpload' ? 'bgRemove' : 'enhance';
-                processFile(file, toolType);
-            } else {
-                toastr.error('Please upload a valid image file');
-            }
-        });
-
-        dropZone.addEventListener('click', () => {
-            const inputId = id === 'bgRemoveUpload' ? 'bgRemoveInput' : 'enhanceInput';
-            document.getElementById(inputId).click();
-        });
-    });
+    // Payment form
+    paymentForm.addEventListener('submit', handlePaymentSubmit);
 
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
@@ -174,57 +362,61 @@ function initEventListeners() {
     }));
 }
 
-// Initialize Hero Slider
+// Initialize Hero Slider - Professional Version
 function initHeroSlider() {
-    const sliderHandle = document.querySelector('.hero .slider-handle');
-    const afterOverlay = document.querySelector('.hero .after-overlay');
-    const beforeAfterDemo = document.getElementById('heroDemo');
+    const sliderHandle = document.getElementById('heroSliderHandle');
+    const heroDivider = document.getElementById('heroDivider');
+    const heroBefore = document.getElementById('heroBefore');
+    const heroAfter = document.getElementById('heroAfter');
+    const heroDemo = document.getElementById('heroDemo');
     
-    if (!sliderHandle || !afterOverlay) return;
+    if (!sliderHandle || !heroDivider || !heroBefore || !heroAfter) return;
     
     let isDragging = false;
-    let startX = 0;
-    let sliderLeft = 50; // Start at 50%
+    let currentPosition = 50; // Start at 50%
     
     // Set initial position
-    updateSliderPosition(sliderLeft);
+    updateSliderPosition(currentPosition);
     
     // Mouse events
     sliderHandle.addEventListener('mousedown', startDrag);
-    beforeAfterDemo.addEventListener('mousedown', startDragFromArea);
+    heroDemo.addEventListener('mousedown', startDragFromArea);
     
     // Touch events for mobile
-    sliderHandle.addEventListener('touchstart', startDragTouch);
-    beforeAfterDemo.addEventListener('touchstart', startDragFromAreaTouch);
+    sliderHandle.addEventListener('touchstart', startDragTouch, { passive: false });
+    heroDemo.addEventListener('touchstart', startDragFromAreaTouch, { passive: false });
     
     function startDrag(e) {
         isDragging = true;
-        startX = e.clientX;
         sliderHandle.style.cursor = 'grabbing';
-        
         document.addEventListener('mousemove', onDrag);
         document.addEventListener('mouseup', stopDrag);
         e.preventDefault();
     }
     
     function startDragFromArea(e) {
-        if (e.target === sliderHandle) return;
+        if (e.target === sliderHandle || e.target.closest('.slider-handle')) return;
         
-        const rect = beforeAfterDemo.getBoundingClientRect();
+        const rect = heroDemo.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const percentage = (x / rect.width) * 100;
         
-        sliderLeft = Math.max(0, Math.min(100, percentage));
-        updateSliderPosition(sliderLeft);
+        currentPosition = Math.max(5, Math.min(95, percentage));
+        updateSliderPosition(currentPosition);
+        
+        // Start dragging from this position
+        isDragging = true;
+        sliderHandle.style.cursor = 'grabbing';
+        document.addEventListener('mousemove', onDrag);
+        document.addEventListener('mouseup', stopDrag);
+        e.preventDefault();
     }
     
     function startDragTouch(e) {
         if (e.touches.length !== 1) return;
         
         isDragging = true;
-        startX = e.touches[0].clientX;
-        
-        document.addEventListener('touchmove', onDragTouch);
+        document.addEventListener('touchmove', onDragTouch, { passive: false });
         document.addEventListener('touchend', stopDrag);
         e.preventDefault();
     }
@@ -232,35 +424,41 @@ function initHeroSlider() {
     function startDragFromAreaTouch(e) {
         if (e.touches.length !== 1) return;
         
-        const rect = beforeAfterDemo.getBoundingClientRect();
+        const rect = heroDemo.getBoundingClientRect();
         const x = e.touches[0].clientX - rect.left;
         const percentage = (x / rect.width) * 100;
         
-        sliderLeft = Math.max(0, Math.min(100, percentage));
-        updateSliderPosition(sliderLeft);
+        currentPosition = Math.max(5, Math.min(95, percentage));
+        updateSliderPosition(currentPosition);
+        
+        // Start dragging from this position
+        isDragging = true;
+        document.addEventListener('touchmove', onDragTouch, { passive: false });
+        document.addEventListener('touchend', stopDrag);
         e.preventDefault();
     }
     
     function onDrag(e) {
         if (!isDragging) return;
         
-        const rect = beforeAfterDemo.getBoundingClientRect();
+        const rect = heroDemo.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const percentage = (x / rect.width) * 100;
         
-        sliderLeft = Math.max(0, Math.min(100, percentage));
-        updateSliderPosition(sliderLeft);
+        currentPosition = Math.max(5, Math.min(95, percentage));
+        updateSliderPosition(currentPosition);
     }
     
     function onDragTouch(e) {
         if (!isDragging || e.touches.length !== 1) return;
         
-        const rect = beforeAfterDemo.getBoundingClientRect();
+        const rect = heroDemo.getBoundingClientRect();
         const x = e.touches[0].clientX - rect.left;
         const percentage = (x / rect.width) * 100;
         
-        sliderLeft = Math.max(0, Math.min(100, percentage));
-        updateSliderPosition(sliderLeft);
+        currentPosition = Math.max(5, Math.min(95, percentage));
+        updateSliderPosition(currentPosition);
+        e.preventDefault();
     }
     
     function stopDrag() {
@@ -274,8 +472,106 @@ function initHeroSlider() {
     }
     
     function updateSliderPosition(percentage) {
-        afterOverlay.style.width = `${100 - percentage}%`;
+        // Update slider handle position
         sliderHandle.style.left = `${percentage}%`;
+        heroDivider.style.left = `${percentage}%`;
+        
+        // Update image clipping
+        // The "after" image shows everything to the left of the slider
+        heroAfter.style.clipPath = `polygon(0 0, ${percentage}% 0, ${percentage}% 100%, 0 100%)`;
+        
+        // The "before" image shows everything to the right of the slider
+        heroBefore.style.clipPath = `polygon(${percentage}% 0, 100% 0, 100% 100%, ${percentage}% 100%)`;
+    }
+    
+    // Initialize with default position
+    updateSliderPosition(currentPosition);
+    
+    // Add keyboard controls for accessibility
+    sliderHandle.setAttribute('tabindex', '0');
+    sliderHandle.setAttribute('role', 'slider');
+    sliderHandle.setAttribute('aria-label', 'Before and after image comparison slider');
+    sliderHandle.setAttribute('aria-valuemin', '5');
+    sliderHandle.setAttribute('aria-valuemax', '95');
+    sliderHandle.setAttribute('aria-valuenow', '50');
+    
+    sliderHandle.addEventListener('keydown', (e) => {
+        switch(e.key) {
+            case 'ArrowLeft':
+            case 'ArrowDown':
+                currentPosition = Math.max(5, currentPosition - 5);
+                updateSliderPosition(currentPosition);
+                sliderHandle.setAttribute('aria-valuenow', currentPosition);
+                e.preventDefault();
+                break;
+            case 'ArrowRight':
+            case 'ArrowUp':
+                currentPosition = Math.min(95, currentPosition + 5);
+                updateSliderPosition(currentPosition);
+                sliderHandle.setAttribute('aria-valuenow', currentPosition);
+                e.preventDefault();
+                break;
+            case 'Home':
+                currentPosition = 5;
+                updateSliderPosition(currentPosition);
+                sliderHandle.setAttribute('aria-valuenow', currentPosition);
+                e.preventDefault();
+                break;
+            case 'End':
+                currentPosition = 95;
+                updateSliderPosition(currentPosition);
+                sliderHandle.setAttribute('aria-valuenow', currentPosition);
+                e.preventDefault();
+                break;
+        }
+    });
+    
+    // Add smooth animation for demo effect on page load
+    setTimeout(() => {
+        animateSliderDemo();
+    }, 1000);
+}
+
+// Animate slider for demo effect
+function animateSliderDemo() {
+    const sliderHandle = document.getElementById('heroSliderHandle');
+    if (!sliderHandle) return;
+    
+    let isAnimating = false;
+    
+    // Animate on first view
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && !isAnimating) {
+                isAnimating = true;
+                startDemoAnimation();
+            }
+        });
+    }, { threshold: 0.5 });
+    
+    observer.observe(sliderHandle);
+    
+    function startDemoAnimation() {
+        let position = 50;
+        let direction = -1; // Start moving left
+        let speed = 0.5;
+        
+        function animate() {
+            position += speed * direction;
+            
+            if (position <= 25) {
+                direction = 1; // Change direction to right
+            } else if (position >= 75) {
+                direction = -1; // Change direction to left
+                // After one full cycle, stop animation
+                clearInterval(animation);
+                return;
+            }
+            
+            updateSliderPosition(position);
+        }
+        
+        const animation = setInterval(animate, 16); // ~60fps
     }
 }
 
@@ -314,38 +610,94 @@ async function handleUserSignIn(user) {
     userGreeting.style.display = 'flex';
     authBtn.innerHTML = '<i class="fas fa-user-circle"></i> Account';
     
-    // Check if user exists in database
-    const userRef = database.ref('users/' + user.uid);
+    // Load user data from database
+    await loadUserData(user.uid);
+    
+    // Update credits display
+    updateCreditsDisplay();
+    
+    // Update pricing buttons based on package status
+    updatePricingButtons();
+}
+
+async function loadUserData(uid) {
+    const userRef = database.ref('users/' + uid);
     const snapshot = await userRef.once('value');
     
     if (!snapshot.exists()) {
-        // New user - create record with 3 free credits
+        // New user - create record with free tier
         await userRef.set({
-            email: user.email,
-            name: user.displayName,
+            email: userData.email,
+            name: userData.displayName,
             credits: 3,
+            package: 'free',
+            package_expiry: null,
             joinedAt: firebase.database.ServerValue.TIMESTAMP,
-            lastLogin: firebase.database.ServerValue.TIMESTAMP
+            lastLogin: firebase.database.ServerValue.TIMESTAMP,
+            stripe_customer_id: null,
+            purchases: []
         });
         userCredits = 3;
+        userPackage = 'free';
+        packageExpiry = null;
         toastr.info('Welcome! You have 3 free credits to start.');
     } else {
-        // Existing user - update last login and get credits
-        const userData = snapshot.val();
-        userCredits = userData.credits || 0;
+        const userDataDB = snapshot.val();
+        userCredits = userDataDB.credits || 0;
+        userPackage = userDataDB.package || 'free';
+        packageExpiry = userDataDB.package_expiry || null;
+        
+        // Check package expiry
+        await checkPackageExpiry();
+        
         await userRef.update({
             lastLogin: firebase.database.ServerValue.TIMESTAMP
         });
     }
+}
+
+async function checkPackageExpiry() {
+    if (!packageExpiry || userCredits === 0) {
+        // Package expired or no credits
+        if (userPackage !== 'free') {
+            await downgradeToFree();
+        }
+        return;
+    }
     
-    // Update credits display
-    updateCreditsDisplay();
+    const expiryDate = new Date(packageExpiry);
+    const now = new Date();
+    
+    if (now > expiryDate) {
+        // Package expired
+        await downgradeToFree();
+    }
+}
+
+async function downgradeToFree() {
+    const userRef = database.ref('users/' + currentUser.uid);
+    await userRef.update({
+        package: 'free',
+        package_expiry: null,
+        credits: 3
+    });
+    
+    userPackage = 'free';
+    packageExpiry = null;
+    userCredits = 3;
+    
+    toastr.warning('Your package has expired. Downgraded to free plan.');
+    
+    // Update pricing buttons since user can now purchase
+    updatePricingButtons();
 }
 
 function handleUserSignOut() {
     currentUser = null;
     userData = null;
     userCredits = 0;
+    userPackage = null;
+    packageExpiry = null;
     
     // Update UI
     userGreeting.style.display = 'none';
@@ -354,6 +706,9 @@ function handleUserSignOut() {
     
     // Reset credit display
     document.querySelectorAll('.credit-display').forEach(el => el.remove());
+    
+    // Reset pricing buttons
+    updatePricingButtons();
 }
 
 async function signOut() {
@@ -410,7 +765,10 @@ async function processFile(file, toolType) {
         return;
     }
     
-    // Check credits and show custom notification if 0 credits
+    // Check package expiry
+    await checkPackageExpiry();
+    
+    // Check credits
     if (userCredits <= 0) {
         showNoCreditsNotification(toolType);
         return;
@@ -775,6 +1133,11 @@ async function deductCredit() {
     
     updateCreditsDisplay();
     
+    // Check if credits dropped below 4, enable purchase buttons if needed
+    if (userCredits < 4 && hasActivePackage()) {
+        updatePricingButtons();
+    }
+    
     // Show warning toast when credits are low (1 or 2 credits left)
     if (userCredits === 1) {
         showLowCreditWarning();
@@ -790,6 +1153,11 @@ async function restoreCredit() {
     });
     
     updateCreditsDisplay();
+    
+    // Check if credits are now 4 or more, disable purchase buttons if needed
+    if (userCredits >= 4 && hasActivePackage()) {
+        updatePricingButtons();
+    }
 }
 
 // Show warning when credits are low
@@ -800,6 +1168,7 @@ function showLowCreditWarning() {
     });
 }
 
+// Update credits display with package info
 function updateCreditsDisplay() {
     // Remove existing credit displays
     document.querySelectorAll('.credit-display').forEach(el => el.remove());
@@ -808,22 +1177,40 @@ function updateCreditsDisplay() {
         const creditElement = document.createElement('div');
         creditElement.className = 'credit-display';
         
-        // Change color based on credit count
-        let creditColor = '#10b981'; // Green for 3+ credits
+        // Determine color and icon
+        let creditColor = '#10b981'; // Green
         let icon = 'fas fa-coins';
+        let packageInfo = '';
         
         if (userCredits === 0) {
-            creditColor = '#ef4444'; // Red for 0 credits
+            creditColor = '#ef4444'; // Red
             icon = 'fas fa-exclamation-circle';
-        } else if (userCredits <= 2) {
-            creditColor = '#f59e0b'; // Orange/Yellow for low credits
+        } else if (userCredits <= 10) {
+            creditColor = '#f59e0b'; // Orange/Yellow
             icon = 'fas fa-exclamation-triangle';
+        }
+        
+        // Add package info if not free
+        if (userPackage && userPackage !== 'free') {
+            const expiryDate = new Date(packageExpiry);
+            const daysLeft = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+            const packageName = userPackage.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            if (hasActivePackage()) {
+                packageInfo = `<small class="active-package">${packageName} | ${daysLeft} days left</small>`;
+            } else {
+                packageInfo = `<small>${packageName} expired</small>`;
+            }
         }
         
         creditElement.innerHTML = `
             <i class="${icon}"></i>
-            <span>${userCredits} Credits</span>
+            <div class="credit-info">
+                <span class="credit-count">${userCredits} Credits</span>
+                ${packageInfo}
+            </div>
         `;
+        
         creditElement.style.cssText = `
             position: fixed;
             top: 100px;
@@ -841,7 +1228,18 @@ function updateCreditsDisplay() {
             animation: fadeIn 0.3s ease-out;
             cursor: pointer;
             transition: transform 0.3s, box-shadow 0.3s;
+            min-width: 160px;
         `;
+        
+        // Add CSS for active package indicator
+        const style = document.createElement('style');
+        style.textContent = `
+            .active-package {
+                color: #fde047 !important;
+                font-weight: 600 !important;
+            }
+        `;
+        document.head.appendChild(style);
         
         // Add hover effect
         creditElement.addEventListener('mouseenter', () => {
@@ -854,10 +1252,12 @@ function updateCreditsDisplay() {
             creditElement.style.boxShadow = '0 5px 20px rgba(0, 0, 0, 0.3)';
         });
         
-        // Click to go to pricing
+        // Click to go to pricing or show package info
         creditElement.addEventListener('click', () => {
             if (userCredits === 0) {
                 showNoCreditsNotification('general');
+            } else if (hasActivePackage()) {
+                toastr.info('You have an active package. You can purchase a new package when your credits drop below 4.');
             } else {
                 scrollToPricing();
             }
@@ -935,56 +1335,224 @@ function resetTool(toolType) {
 function selectPlan(plan) {
     if (!currentUser) {
         loginModal.style.display = 'block';
-        toastr.warning('Please sign in to select a plan');
+        toastr.warning('Please sign in to purchase a package');
         return;
     }
     
-    const plans = {
-        free: { name: 'Free', price: 0, credits: 3 },
-        pro: { name: 'Pro', price: 19, credits: 100 },
-        business: { name: 'Business', price: 49, credits: 'unlimited' }
-    };
-    
-    const selectedPlan = plans[plan];
-    
-    if (plan === 'free') {
-        toastr.info('You are already on the Free plan');
+    // Check purchase eligibility
+    const eligibility = checkPurchaseEligibility();
+    if (!eligibility.eligible) {
+        toastr.warning(eligibility.reason);
         return;
     }
     
-    // Simulate payment processing
-    setTimeout(() => {
-        toastr.success(`Thank you for choosing ${selectedPlan.name} plan!`);
-        
-        // Record pricing history
-        recordPricingHistory(plan, selectedPlan.price);
-        
-        // Update credits for Pro plan
-        if (plan === 'pro') {
-            userCredits = 100;
-            updateCreditsDisplay();
-            database.ref('users/' + currentUser.uid).update({
-                credits: 100
-            });
-        } else if (plan === 'business') {
-            userCredits = 9999; // Unlimited
-            updateCreditsDisplay();
-            database.ref('users/' + currentUser.uid).update({
-                credits: 9999
-            });
-        }
-    }, 1000);
+    currentPackage = packages[plan];
+    if (!currentPackage) {
+        toastr.error('Invalid package selected');
+        return;
+    }
+    
+    // Update modal with package details
+    document.getElementById('selectedPackageName').textContent = currentPackage.name;
+    document.getElementById('selectedPackagePrice').textContent = `$${currentPackage.price}`;
+    document.getElementById('selectedPackageCredits').textContent = currentPackage.credits;
+    document.getElementById('selectedPackageDuration').textContent = `${currentPackage.duration} days`;
+    
+    // Show payment modal
+    showPaymentModal();
 }
 
-
-async function recordPricingHistory(plan, price) {
-    if (!currentUser) return;
+function showPaymentModal() {
+    paymentModal.style.display = 'block';
     
-    await database.ref('pricingHistory/' + currentUser.uid).push({
-        plan: plan,
-        price: price,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
-    });
+    // Clear any previous errors
+    cardErrors.textContent = '';
+    
+    // Clear card element
+    cardElement.clear();
+}
+
+function closePaymentModal() {
+    paymentModal.style.display = 'none';
+    currentPackage = null;
+    paymentIntentClientSecret = null;
+    
+    // Reset form
+    paymentForm.reset();
+    cardElement.clear();
+    cardErrors.textContent = '';
+    submitPaymentBtn.disabled = false;
+    buttonText.textContent = 'Pay Now';
+    paymentSpinner.classList.add('hidden');
+}
+
+function closeSuccessModal() {
+    successModal.style.display = 'none';
+}
+
+// Payment Handling
+async function handlePaymentSubmit(event) {
+    event.preventDefault();
+    
+    if (!currentUser || !currentPackage) {
+        toastr.error('Please sign in and select a package');
+        return;
+    }
+    
+    // Check purchase eligibility again (in case something changed)
+    const eligibility = checkPurchaseEligibility();
+    if (!eligibility.eligible) {
+        toastr.warning(eligibility.reason);
+        closePaymentModal();
+        return;
+    }
+    
+    // Disable submit button
+    submitPaymentBtn.disabled = true;
+    buttonText.textContent = 'Processing...';
+    paymentSpinner.classList.remove('hidden');
+    
+    try {
+        // Create payment intent via your backend
+        const response = await fetch(`${API_BASE_URL}/api/create-payment-intent`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                package: currentPackage.name,
+                price: currentPackage.price,
+                credits: currentPackage.credits,
+                duration: currentPackage.duration,
+                user_id: currentUser.uid,
+                email: currentUser.email
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to create payment intent');
+        }
+        
+        const { clientSecret, paymentIntentId } = await response.json();
+        paymentIntentClientSecret = clientSecret;
+        
+        // Confirm payment with Stripe
+        const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+            payment_method: {
+                card: cardElement,
+                billing_details: {
+                    email: currentUser.email,
+                    name: currentUser.displayName
+                }
+            }
+        });
+        
+        if (error) {
+            throw error;
+        }
+        
+        if (paymentIntent.status === 'succeeded') {
+            // Payment successful - activate package
+            await activatePackage(paymentIntent.id);
+            
+            // Show success modal
+            showSuccessModal();
+            
+            // Close payment modal
+            closePaymentModal();
+        } else {
+            throw new Error('Payment failed');
+        }
+        
+    } catch (error) {
+        console.error('Payment error:', error);
+        cardErrors.textContent = error.message || 'Payment failed. Please try again.';
+        cardErrors.style.color = '#ef4444';
+        toastr.error('Payment failed: ' + error.message);
+        
+        // Re-enable submit button
+        submitPaymentBtn.disabled = false;
+        buttonText.textContent = 'Pay Now';
+        paymentSpinner.classList.add('hidden');
+    }
+}
+
+async function activatePackage(paymentIntentId) {
+    try {
+        const userRef = database.ref('users/' + currentUser.uid);
+        
+        // Calculate expiry date
+        const now = new Date();
+        const expiryDate = new Date(now);
+        expiryDate.setDate(now.getDate() + currentPackage.duration);
+        
+        // Update user data
+        await userRef.update({
+            package: currentPackage.name.toLowerCase().replace(' ', '_'),
+            package_expiry: expiryDate.toISOString(),
+            credits: userCredits + currentPackage.credits,
+            last_purchase: firebase.database.ServerValue.TIMESTAMP
+        });
+        
+        // Add to purchase history
+        const purchaseRef = database.ref(`purchases/${currentUser.uid}`).push();
+        await purchaseRef.set({
+            package: currentPackage.name,
+            price: currentPackage.price,
+            credits: currentPackage.credits,
+            duration: currentPackage.duration,
+            payment_intent_id: paymentIntentId,
+            stripe_customer_id: currentUser.uid,
+            timestamp: firebase.database.ServerValue.TIMESTAMP,
+            status: 'completed'
+        });
+        
+        // Update local variables
+        userPackage = currentPackage.name.toLowerCase().replace(' ', '_');
+        packageExpiry = expiryDate.toISOString();
+        userCredits += currentPackage.credits;
+        
+        // Update display
+        updateCreditsDisplay();
+        
+        // Update pricing buttons (now disabled)
+        updatePricingButtons();
+        
+    } catch (error) {
+        console.error('Error activating package:', error);
+        throw error;
+    }
+}
+
+function showSuccessModal() {
+    document.getElementById('successMessage').textContent = 
+        `Your ${currentPackage.name} has been activated successfully!`;
+    
+    document.getElementById('successDetails').innerHTML = `
+        <div class="detail-item">
+            <span>Credits Added:</span>
+            <strong>${currentPackage.credits}</strong>
+        </div>
+        <div class="detail-item">
+            <span>Total Credits:</span>
+            <strong>${userCredits}</strong>
+        </div>
+        <div class="detail-item">
+            <span>Package Expires:</span>
+            <strong>${new Date(packageExpiry).toLocaleDateString()}</strong>
+        </div>
+        <div class="detail-item">
+            <span>Purchase Status:</span>
+            <strong class="active-package">Active</strong>
+        </div>
+    `;
+    
+    successModal.style.display = 'block';
+    
+    // Add reminder about purchase restrictions
+    setTimeout(() => {
+        toastr.info('Note: You can purchase a new package when your credits drop below 4 or your current package expires.');
+    }, 2000);
 }
 
 // UI Helper Functions
@@ -1078,3 +1646,234 @@ setTimeout(checkAPIHealth, 1000);
 
 // Update online users periodically
 setInterval(updateOnlineUsers, 30000);
+
+// Add payment modal CSS styles
+const paymentModalStyles = `
+/* Payment Modal Styles */
+.payment-modal .modal-content {
+    max-width: 500px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+.payment-content {
+    padding: 2rem;
+}
+
+.package-summary {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.summary-item:last-child {
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.summary-item span {
+    color: #94a3b8;
+}
+
+.summary-item strong {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.card-element-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.stripe-logo {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 1rem;
+    font-size: 2rem;
+    color: #94a3b8;
+}
+
+.StripeElement {
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#card-errors {
+    color: #ef4444;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    min-height: 1.5rem;
+}
+
+.payment-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.payment-actions .btn {
+    flex: 1;
+}
+
+.secure-note {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.875rem;
+    margin-top: 1rem;
+}
+
+.secure-note i {
+    margin-right: 0.5rem;
+    color: #10b981;
+}
+
+/* Success Modal Styles */
+.success-modal .modal-content {
+    max-width: 400px;
+    text-align: center;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+.success-content {
+    padding: 3rem 2rem;
+}
+
+.success-icon {
+    font-size: 4rem;
+    color: #10b981;
+    margin-bottom: 1.5rem;
+}
+
+.success-details {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.detail-item:last-child {
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.detail-item span {
+    color: #94a3b8;
+}
+
+.detail-item strong {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.detail-item .active-package {
+    color: #fde047 !important;
+}
+
+/* Spinner for payment button */
+.spinner {
+    display: inline-block;
+    margin-left: 0.5rem;
+}
+
+.spinner.hidden {
+    display: none;
+}
+
+.spinner .double-bounce1,
+.spinner .double-bounce2 {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #ffffff;
+    opacity: 0.6;
+    position: absolute;
+    top: 0;
+    left: 0;
+    animation: sk-bounce 2.0s infinite ease-in-out;
+}
+
+.spinner .double-bounce2 {
+    animation-delay: -1.0s;
+}
+
+@keyframes sk-bounce {
+    0%, 100% { 
+        transform: scale(0.0);
+    } 50% { 
+        transform: scale(1.0);
+    }
+}
+
+.credit-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.credit-count {
+    font-size: 1.1rem;
+}
+
+.credit-info small {
+    font-size: 0.75rem;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+/* Package active indicator */
+.package-active-indicator {
+    display: block;
+    font-size: 0.8rem;
+    color: #f59e0b;
+    margin-top: 0.5rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Disabled pricing buttons */
+.pricing-card .btn:disabled {
+    position: relative;
+}
+
+.pricing-card .btn:disabled::after {
+    content: '\\f023';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    transform: translateY(-50%);
+    color: #f59e0b;
+}
+`;
+
+// Add the styles to the document
+const styleSheet = document.createElement("style");
+styleSheet.textContent = paymentModalStyles;
+document.head.appendChild(styleSheet);
