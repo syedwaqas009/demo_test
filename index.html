@@ -3,13 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Vision Pro | Professional Image Editing</title>
+    <title>Tool Iq. | Professional Image Editing</title>
+   <link rel="icon" type="image/png" sizes="32x32" href="images/logo.png">
+<link rel="icon" type="image/png" sizes="16x16" href="images/logo.png">
+<link rel="apple-touch-icon" sizes="180x180" href="images/logo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://js.stripe.com/v3/"></script>
+
     <style>
         * {
             margin: 0;
@@ -60,105 +65,134 @@
         </div>
     </div>
 
-    <!-- Header -->
-    <header class="header">
-        <nav class="navbar">
-            <div class="container nav-container">
-                <a href="#" class="logo">
-                    <i class="fas fa-eye"></i> AI Vision Pro
-                </a>
-                <ul class="nav-menu">
-                    <li><a href="#home">Home</a></li>
-                    <li><a href="#features">Features</a></li>
-                    <li><a href="#tools">Tools</a></li>
-                    <li><a href="#pricing">Pricing</a></li>
-                    <li><a href="#about">About</a></li>
-                    <li class="nav-divider"></li>
-                    <li class="user-section">
-                        <span id="userGreeting" style="display: none;">
-                            <i class="fas fa-user-circle"></i> 
-                            <span id="userName"></span>
-                        </span>
-                        <button id="authBtn" class="btn btn-outline">
-                            <i class="fas fa-sign-in-alt"></i> Sign In
-                        </button>
-                        <div id="userDropdown" class="user-dropdown">
-                            <a href="#"><i class="fas fa-history"></i> Usage History</a>
-                            <a href="#"><i class="fas fa-chart-bar"></i> Analytics</a>
-                            <a href="#"><i class="fas fa-cog"></i> Settings</a>
-                            <div class="dropdown-divider"></div>
-                            <a href="#" id="deleteAccountBtn"><i class="fas fa-trash"></i> Delete Account</a>
-                            <a href="#" id="signOutBtn"><i class="fas fa-sign-out-alt"></i> Sign Out</a>
-                        </div>
-                    </li>
-                </ul>
-                <div class="hamburger">
-                    <span class="bar"></span>
-                    <span class="bar"></span>
-                    <span class="bar"></span>
-                </div>
+  <!-- Header -->
+<header class="header">
+    <nav class="navbar">
+        <div class="container nav-container">
+            
+            <a href="index.html" class="logo" style="display:flex; align-items:center; gap:8px; text-decoration:none;">
+                <img 
+                    src="images/logo.png" 
+                    alt="AI Vision Pro Logo"
+                    style="width:55px; height:55px; object-fit:contain;"
+                >
+                <span style="font-size:20px; font-weight:700; color:inherit;">Tooly Iq.
+                </span>
+            </a>
+
+            <ul class="nav-menu">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#tools">Tools</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#about">About</a></li>
+                <li class="nav-divider"></li>
+
+                <li class="user-section">
+                    <span id="userGreeting" style="display:none;">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="userName"></span>
+                    </span>
+
+                    <button id="authBtn" class="btn btn-outline">
+                        <i class="fas fa-sign-in-alt"></i> Sign In
+                    </button>
+
+                    <div id="userDropdown" class="user-dropdown">
+                       
+                        <div class="dropdown-divider"></div>
+                        <a href="#" id="deleteAccountBtn">
+                            <i class="fas fa-trash"></i> Delete Account
+                        </a>
+                        <a href="#" id="signOutBtn">
+                            <i class="fas fa-sign-out-alt"></i> Sign Out
+                        </a>
+                    </div>
+                </li>
+            </ul>
+
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
             </div>
-        </nav>
-    </header>
+
+        </div>
+    </nav>
+</header>
+
 
     <!-- Main Content -->
     <main>
-        <!-- Hero Section -->
-        <section id="home" class="hero">
-            <div class="container">
-                <div class="hero-content">
-                    <div class="hero-text">
-                        <h1 class="hero-title">
-                            <span class="gradient-text">AI-Powered</span> Image Perfection
-                        </h1>
-                        <p class="hero-subtitle">
-                            Professional background removal and quality enhancement 
-                            powered by advanced AI technology
-                        </p>
-                        <div class="hero-stats">
-                            <div class="stat">
-                                <h3>99.9%</h3>
-                                <p>Accuracy</p>
-                            </div>
-                            <div class="stat">
-                                <h3>10M+</h3>
-                                <p>Images Processed</p>
-                            </div>
-                            <div class="stat">
-                                <h3>2s</h3>
-                                <p>Average Processing</p>
-                            </div>
-                        </div>
-                        <div class="hero-buttons">
-                            <button class="btn btn-primary" onclick="scrollToTools()">
-                                <i class="fas fa-magic"></i> Try Now
-                            </button>
-                            <button class="btn btn-outline" onclick="scrollToPricing()">
-                                <i class="fas fa-crown"></i> View Plans
-                            </button>
-                        </div>
+    <!-- Hero Section -->
+<section id="home" class="hero">
+    <div class="container">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1 class="hero-title">
+                    <span class="gradient-text">AI-Powered</span> Image Perfection
+                </h1>
+                <p class="hero-subtitle">
+                    Professional background removal and quality enhancement 
+                    powered by advanced AI technology
+                </p>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <h3>99.9%</h3>
+                        <p>Accuracy</p>
                     </div>
-                    <div class="hero-visual">
-                        <div class="floating-card">
-                            <div class="card-content">
-                                <div class="before-after-demo" id="heroDemo">
-                                    <div class="image-container">
-                                        <img src="images/a1.jpg" alt="After background removal" class="after-image" id="afterImage">
-                                        <div class="after-overlay">
-                                            <img src="images/a2.jpg" alt="After background removal" class="after-image" id="afterImage">
-                                                 alt="After" class="after-image">
-                                        </div>
-                                        <div class="slider-handle">
-                                            <i class="fas fa-arrows-alt-h"></i>
-                                        </div>
-                                    </div>
+                    <div class="stat">
+                        <h3>10M+</h3>
+                        <p>Images Processed</p>
+                    </div>
+                    <div class="stat">
+                        <h3>2s</h3>
+                        <p>Average Processing</p>
+                    </div>
+                </div>
+                <div class="hero-buttons">
+                    <button class="btn btn-primary" onclick="scrollToTools()">
+                        <i class="fas fa-magic"></i> Try Now
+                    </button>
+                    <button class="btn btn-outline" onclick="scrollToPricing()">
+                        <i class="fas fa-crown"></i> View Plans
+                    </button>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="floating-card">
+                    <div class="card-content">
+                        <div class="before-after-demo" id="heroDemo">
+                            <div class="image-container">
+                                <!-- Before image - fixed position -->
+                                <img src="images/a2.jpg" alt="Before" class="hero-image hero-before" id="heroBefore">
+                                
+                                <!-- After image - fixed position, clipped by slider -->
+                                <img src="images/a1.jpg" alt="After" class="hero-image hero-after" id="heroAfter">
+                                
+                                <!-- Slider handle -->
+                                <div class="slider-handle" id="heroSliderHandle">
+                                    <i class="fas fa-arrows-alt-h"></i>
+                                </div>
+                                
+                                <!-- Slider line/divider -->
+                                <div class="slider-divider" id="heroDivider"></div>
+                                
+                                <!-- Overlay labels -->
+                                <div class="slider-label slider-label-before">
+                                    <span>BEFORE</span>
+                                </div>
+                                <div class="slider-label slider-label-after">
+                                    <span>AFTER</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </section>
+        </div>
+    </div>
+</section>
 
         <!-- Features Section -->
         <section id="features" class="features">
@@ -289,19 +323,7 @@
                         </div>
                         
                         <div class="tool-body">
-                            <div class="enhancement-controls">
-                                <div class="control-group">
-                                    <label for="enhancementLevel">
-                                        <i class="fas fa-sliders-h"></i> Enhancement Level
-                                    </label>
-                                    <div class="level-selector">
-                                        <button class="level-btn" data-level="1" onclick="setEnhancementLevel(1)">Low</button>
-                                        <button class="level-btn active" data-level="2" onclick="setEnhancementLevel(2)">Medium</button>
-                                        <button class="level-btn" data-level="3" onclick="setEnhancementLevel(3)">High</button>
-                                        <button class="level-btn" data-level="4" onclick="setEnhancementLevel(4)">Max</button>
-                                    </div>
-                                </div>
-                            </div>
+                           
                             
                             <div class="upload-area" id="enhanceUpload">
                                 <i class="fas fa-cloud-upload-alt"></i>
@@ -387,25 +409,24 @@
                     <!-- Free Plan -->
                     <div class="pricing-card">
                         <div class="pricing-header">
-                            <h3>Free</h3>
+                            <h3>Starter Pack</h3>
                             <div class="price">
                                 <span class="currency">$</span>
-                                <span class="amount">0</span>
+                                <span class="amount">5</span>
                                 <span class="period">/month</span>
                             </div>
                         </div>
                         <div class="pricing-features">
                             <ul>
-                                <li><i class="fas fa-check"></i> 3 Credits Monthly</li>
+                                <li><i class="fas fa-check"></i> 100 Credits</li>
                                 <li><i class="fas fa-check"></i> Background Removal</li>
                                 <li><i class="fas fa-check"></i> Basic Enhancement</li>
-                                <li><i class="fas fa-times"></i> Batch Processing</li>
-                                <li><i class="fas fa-times"></i> Priority Support</li>
-                                <li><i class="fas fa-times"></i> Commercial License</li>
+                                <li><i class="fas fa-check"></i> Priority Support</li>
+                                <li><i class="fas fa-check"></i> Best for testing & small jobs</li>
                             </ul>
                         </div>
                         <button class="btn btn-outline" onclick="selectPlan('free')">
-                            Get Started
+                            Buy
                         </button>
                     </div>
 
@@ -413,22 +434,22 @@
                     <div class="pricing-card featured">
                         <div class="pricing-badge">Most Popular</div>
                         <div class="pricing-header">
-                            <h3>Pro</h3>
+                            <h3>Pro Pack</h3>
                             <div class="price">
                                 <span class="currency">$</span>
-                                <span class="amount">19</span>
+                                <span class="amount">17</span>
                                 <span class="period">/month</span>
                             </div>
                         </div>
                         <div class="pricing-features">
                             <ul>
-                                <li><i class="fas fa-check"></i> 150 Credits Monthly</li>
+                                <li><i class="fas fa-check"></i> 500 Credits</li>
 <li><i class="fas fa-check"></i> 1 credit per image</li>
                                 <li><i class="fas fa-check"></i> Advanced Background Removal</li>
                                 <li><i class="fas fa-check"></i> Max Enhancement</li>
                
                                 <li><i class="fas fa-check"></i> Priority Support</li>
-                                <li><i class="fas fa-times"></i> Commercial License</li>
+                                <li><i class="fas fa-check"></i> Commercial License</li>
                             </ul>
                         </div>
                         <button class="btn btn-primary" onclick="selectPlan('pro')">
@@ -439,11 +460,11 @@
                     <!-- Business Plan -->
                     <div class="pricing-card">
                         <div class="pricing-header">
-                            <h3>One Time Payment</h3>
+                            <h3>Growth Pack</h3>
                             <div class="price">
                                 <span class="currency">$</span>
-                                <span class="amount">70</span>
-                                <span class="period">/lifetime access</span>
+                                <span class="amount">10</span>
+                                <span class="period">/monthly</span>
                             </div>
                         </div>
                         <div class="pricing-features">
@@ -454,7 +475,7 @@
 
                              
                                 <li><i class="fas fa-check"></i> 24/7 Priority Support</li>
-                                <li><i class="fas fa-check"></i> Commercial License</li>
+                                <li><i class="fas fa-times"></i> Commercial License</li>
                                
                             </ul>
                         </div>
@@ -510,22 +531,36 @@
         <div class="container">
             <div class="footer-content">
                 <div class="footer-section">
-                    <div class="footer-logo">
-                        <i class="fas fa-eye"></i> AI Vision Pro
-                    </div>
+                     <a href="#" class="logo" style="display:flex; align-items:center; gap:8px; text-decoration:none;">
+                <img 
+                    src="images/logo.png" 
+                    alt="AI Vision Pro Logo"
+                    style="width:55px; height:55px; object-fit:contain;"
+                >
+                <span style="font-size:20px; font-weight:700; color:inherit;">Tooly Iq.
+                </span>
+            </a>
                     <p>Professional AI-powered image editing for everyone.</p>
-                    <div class="social-links">
-                        <a href="#"><i class="fab fa-twitter"></i></a>
-                        <a href="#"><i class="fab fa-github"></i></a>
-                        <a href="#"><i class="fab fa-discord"></i></a>
-                    </div>
+      <div class="contact-info">
+    <h4>Contact</h4>
+    <a 
+        href="https://mail.google.com/mail/?view=cm&fs=1&to=toolyiq@gmail.com"
+        target="_blank"
+        class="gmail-link"
+    >
+        <i class="fas fa-envelope"></i>
+        <span>toolyiq@gmail.com</span>
+    </a>
+</div>
+
+
                 </div>
                 <div class="footer-section">
                     <h4>Tools</h4>
                     <ul>
                         <li><a href="#tools">Background Remover</a></li>
                         <li><a href="#tools">Image Enhancer</a></li>
-                        <li><a href="#tools">Batch Processing</a></li>
+                      
                     </ul>
                 </div>
                 <div class="footer-section">
@@ -533,34 +568,103 @@
                     <ul>
                         <li><a href="#about">About Us</a></li>
                         <li><a href="#pricing">Pricing</a></li>
-                        <li><a href="#">Blog</a></li>
-                        <li><a href="#">Contact</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">
                     <h4>Legal</h4>
                     <ul>
-                        <li><a href="#">Privacy Policy</a></li>
-                        <li><a href="#">Terms of Service</a></li>
-                        <li><a href="#">Cookie Policy</a></li>
+                        <li><a href="privacypolicy.html">Privacy Policy</a></li>
+                        <li><a href="terms-of-service.html">Terms of Service</a></li>
                     </ul>
                 </div>
+
             </div>
             <div class="footer-bottom">
                 <p>&copy; 2024 AI Vision Pro. All rights reserved.</p>
                 <div class="footer-info">
                     <span><i class="fas fa-server"></i> API Status: <span class="status online">Online</span></span>
-                    <span><i class="fas fa-users"></i> Users Online: <span id="onlineUsers">1,234</span></span>
                 </div>
             </div>
         </div>
     </footer>
+
+<!-- Add this Payment Modal before the closing body tag -->
+<div id="paymentModal" class="modal payment-modal">
+    <div class="modal-content payment-content">
+        <span class="close-payment-modal">&times;</span>
+        <div class="modal-body">
+            <h2><i class="fas fa-credit-card"></i> Complete Your Purchase</h2>
+            
+            <div class="package-summary">
+                <div class="summary-item">
+                    <span>Package:</span>
+                    <strong id="selectedPackageName">Pro Plan</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Price:</span>
+                    <strong id="selectedPackagePrice">$19</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Credits:</span>
+                    <strong id="selectedPackageCredits">100</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Duration:</span>
+                    <strong id="selectedPackageDuration">30 days</strong>
+                </div>
+            </div>
+
+            <!-- Stripe Payment Form -->
+            <form id="payment-form">
+                <div class="card-element-container">
+                    <div class="stripe-logo">
+                        <i class="fab fa-cc-visa"></i>
+                        <i class="fab fa-cc-mastercard"></i>
+                        <i class="fab fa-cc-amex"></i>
+                    </div>
+                    <div id="card-element">
+                        <!-- Stripe Card Element will be inserted here -->
+                    </div>
+                    <div id="card-errors" role="alert"></div>
+                </div>
+                
+                <div class="payment-actions">
+                    <button type="submit" id="submit-payment" class="btn btn-primary">
+                        <span id="button-text">Pay Now</span>
+                        <div id="payment-spinner" class="spinner hidden">
+                            <div class="double-bounce1"></div>
+                            <div class="double-bounce2"></div>
+                        </div>
+                    </button>
+                    <button type="button" class="btn btn-outline" id="cancel-payment">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+            
+            <p class="secure-note">
+                <i class="fas fa-lock"></i> Secure payment powered by Stripe
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Add this success modal -->
+<div id="successModal" class="modal success-modal">
+    <div class="modal-content success-content">
+        <div class="success-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <h2>Payment Successful!</h2>
+        <p id="successMessage">Your package has been activated successfully.</p>
+        <div class="success-details" id="successDetails"></div>
+        <button class="btn btn-primary" id="closeSuccessModal">Continue</button>
+    </div>
+</div>
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <link rel="stylesheet" href="styles.css">
     <script src="script.js"></script>
 </body>
-
 </html>
-
